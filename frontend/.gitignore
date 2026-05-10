@@ -32,6 +32,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# Allow production env (NEXT_PUBLIC_* vars are not secrets — baked into bundle)
+!.env.production
+# Allow example env files
+!.env.example
 
 # vercel
 .vercel

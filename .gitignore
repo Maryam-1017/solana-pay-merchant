@@ -13,6 +13,9 @@ pnpm-debug.log*
 .env.test.local
 .env.production.local
 .env.production
+# Allow frontend production env — NEXT_PUBLIC_* vars are not secrets
+# (they get baked into the browser bundle at build time anyway)
+!frontend/.env.production
 # Keep .env.example files (they have no real secrets)
 !.env.example
 
