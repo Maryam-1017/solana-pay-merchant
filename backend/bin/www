@@ -1,23 +1,27 @@
 #!/usr/bin/env node
 'use strict';
 
+// Log Railway's PORT assignment immediately — before any other code
+console.log('[boot] process.env.PORT =', process.env.PORT);
+
 const http = require('http');
 const app  = require('../app');
 
-const PORT = parseInt(process.env.PORT, 10) || 4000;
+// Railway injects PORT at runtime. Do NOT use parseInt — it can silently
+// return NaN. Simple string-to-number coercion with Number() is safe.
+const PORT = Number(process.env.PORT) || 3000;
+console.log('[boot] Binding to PORT:', PORT);
 
 const server = http.createServer(app);
 
-// Explicit 0.0.0.0 — required for Railway/Docker containers
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`[server] Listening on 0.0.0.0:${PORT}`);
+  console.log(`[server] Ready on 0.0.0.0:${PORT}`);
 });
 
 server.on('error', (err) => {
-  console.error('[server] Error:', err.message);
+  console.error('[server] Fatal:', err.message);
   process.exit(1);
 });
 
-// Keep process alive — log unhandled errors instead of crashing
 process.on('uncaughtException',  err => console.error('[uncaughtException]',  err.message));
 process.on('unhandledRejection', err => console.error('[unhandledRejection]', err));
