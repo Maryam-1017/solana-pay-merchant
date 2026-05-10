@@ -1,33 +1,31 @@
 const express = require('express');
-const router = express.Router();
+const router  = express.Router();
 const { registerMerchant, getMerchantByWallet } = require('../db');
-const { PublicKey } = require('@solana/web3.js');
+
+// Solana addresses are base58-encoded 32-byte keys: 32–44 chars, no 0/O/I/l
+function isValidSolanaAddress(addr) {
+  return typeof addr === 'string' && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(addr);
+}
 
 // POST /api/merchants/register
-// body: { name, walletAddress, category?, email? }
 router.post('/merchants/register', async (req, res) => {
   try {
     const { name, walletAddress, category, email } = req.body;
 
-    if (!name || typeof name !== 'string' || !name.trim()) {
+    if (!name || typeof name !== 'string' || !name.trim())
       return res.status(400).json({ error: 'name is required' });
-    }
-    if (!walletAddress) {
-      return res.status(400).json({ error: 'walletAddress is required' });
-    }
 
-    // validate it's a real Solana public key
-    try {
-      new PublicKey(walletAddress);
-    } catch {
+    if (!walletAddress)
+      return res.status(400).json({ error: 'walletAddress is required' });
+
+    if (!isValidSolanaAddress(walletAddress))
       return res.status(400).json({ error: 'invalid Solana wallet address' });
-    }
 
     const merchant = await registerMerchant({
-      name: name.trim(),
+      name:          name.trim(),
       walletAddress,
-      category: category || 'general',
-      email: email || null,
+      category:      category || 'general',
+      email:         email    || null,
     });
 
     return res.json(merchant);

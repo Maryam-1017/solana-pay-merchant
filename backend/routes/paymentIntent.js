@@ -1,61 +1,79 @@
 const express = require('express');
-const router = express.Router();
+const router  = express.Router();
+const crypto  = require('crypto');
 const { createPayment, getPaymentByReference } = require('../db');
-const { encodeURL } = require('@solana/pay');
-const { Keypair, PublicKey } = require('@solana/web3.js');
-const BigNumber = require('bignumber.js');
 
 const USDC_DEVNET_MINT = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
+
+// ── Solana base58 helpers (replaces @solana/web3.js + @solana/pay) ──────────
+const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+
+function toBase58(buf) {
+  const digits = [0];
+  for (const byte of buf) {
+    let carry = byte;
+    for (let i = 0; i < digits.length; i++) {
+      carry += digits[i] << 8;
+      digits[i] = carry % 58;
+      carry = (carry / 58) | 0;
+    }
+    while (carry > 0) { digits.push(carry % 58); carry = (carry / 58) | 0; }
+  }
+  let leading = 0;
+  for (const b of buf) { if (b === 0) leading++; else break; }
+  return '1'.repeat(leading) + digits.reverse().map(d => B58[d]).join('');
+}
+
+// Generate a unique 32-byte base58 reference that looks like a Solana pubkey
+function generateReference() {
+  return toBase58(crypto.randomBytes(32));
+}
+
+// Build a Solana Pay transfer-request URL without any Solana SDK
+// Spec: solana:<recipient>?amount=<n>&spl-token=<mint>&reference=<ref>&label=<l>&message=<m>
+function buildSolanaPayUrl({ recipient, amount, splToken, reference, label, message }) {
+  const p = new URLSearchParams();
+  if (amount    != null)  p.set('amount',    String(amount));
+  if (splToken)           p.set('spl-token', splToken);
+  if (reference)          p.set('reference', reference);
+  if (label)              p.set('label',     label);
+  if (message)            p.set('message',   message);
+  return `solana:${recipient}?${p.toString()}`;
+}
+
+// ── Routes ───────────────────────────────────────────────────────────────────
 
 // POST /api/payments  (alias: /api/payment-intent)
 async function handleCreatePayment(req, res) {
   try {
     const amount = parseFloat(req.body.amount);
-    if (!amount || isNaN(amount) || amount <= 0) {
+    if (!amount || isNaN(amount) || amount <= 0)
       return res.status(400).json({ error: 'invalid amount' });
-    }
 
     const recipient = req.body.recipient || process.env.MERCHANT_WALLET;
-    if (!recipient) {
-      return res.status(400).json({ error: 'no recipient — set MERCHANT_WALLET in .env' });
-    }
+    if (!recipient)
+      return res.status(400).json({ error: 'no recipient — set MERCHANT_WALLET in Railway env' });
 
     const currency = (req.body.currency || 'SOL').toUpperCase();
-    if (!['SOL', 'USDC'].includes(currency)) {
+    if (!['SOL', 'USDC'].includes(currency))
       return res.status(400).json({ error: 'currency must be SOL or USDC' });
-    }
 
-    const label   = req.body.label   || process.env.MERCHANT_NAME || 'Merchant';
-    const message = req.body.message || `${currency} payment to ${label}`;
-
-    const referenceKeypair = Keypair.generate();
-    const reference        = referenceKeypair.publicKey.toString();
+    const label     = req.body.label   || process.env.MERCHANT_NAME || 'Merchant';
+    const message   = req.body.message || `${currency} payment to ${label}`;
+    const reference = generateReference();
 
     await createPayment({ reference, recipient, amount, label, currency });
 
-    const urlParams = {
-      recipient: new PublicKey(recipient),
-      amount:    new BigNumber(amount),
-      reference: referenceKeypair.publicKey,
-      label,
-      message,
-    };
-
-    // For USDC, add the SPL token mint — this produces the spl-token= query param
-    // that Phantom/Solflare wallets read to trigger a token transfer instead of SOL
-    if (currency === 'USDC') {
-      urlParams.splToken = new PublicKey(USDC_DEVNET_MINT);
-    }
-
-    const url = encodeURL(urlParams);
-
-    return res.json({
-      reference,
-      url:       url.toString(),
+    const url = buildSolanaPayUrl({
       recipient,
       amount,
-      currency,
+      splToken:  currency === 'USDC' ? USDC_DEVNET_MINT : undefined,
+      reference,
+      label,
+      message,
     });
+
+    return res.json({ reference, url, recipient, amount, currency });
   } catch (err) {
     console.error('payment-intent error', err);
     return res.status(500).json({ error: 'internal' });
@@ -73,11 +91,8 @@ router.delete('/payments/:reference', async (req, res) => {
 
     const check = await pool.query('SELECT * FROM payments WHERE reference=$1', [reference]);
     if (check.rows.length === 0) return res.status(404).json({ error: 'not found' });
-
-    const payment = check.rows[0];
-    if (payment.status === 'completed') {
+    if (check.rows[0].status === 'completed')
       return res.status(400).json({ error: 'cannot delete a completed payment' });
-    }
 
     await pool.query('DELETE FROM payments WHERE reference=$1', [reference]);
     return res.json({ success: true });
