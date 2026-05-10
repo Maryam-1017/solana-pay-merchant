@@ -34,6 +34,11 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (_req, res) => res.json({ status: 'Solana Pay Backend running' }));
 
+app.get('/api/health', (_req, res) => {
+  const db = require('./db');
+  res.json({ status: 'ok', db: db.dbAvailable() ? 'connected' : 'unavailable' });
+});
+
 app.use('/api', paymentIntentRouter);
 app.use('/api', solanaWebhook);
 app.use('/api', merchantsRouter);
