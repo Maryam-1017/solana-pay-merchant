@@ -11,9 +11,19 @@ var merchantsRouter = require('./routes/merchants');
 
 var app = express();
 
+// Accept comma-separated origins from env, with Vercel + localhost as defaults
+const ALLOWED_ORIGINS = (
+  process.env.FRONTEND_URL ||
+  'http://localhost:3000,https://solana-pay-merchant.vercel.app'
+).split(',').map(o => o.trim());
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  methods: ['GET', 'POST', 'OPTIONS'],
+  origin: (origin, cb) => {
+    // Allow requests with no origin (Railway health checks, curl, Postman)
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+    cb(new Error(`CORS: origin ${origin} not allowed`));
+  },
+  methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type'],
 }));
 app.use(logger('dev'));
