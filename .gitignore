@@ -1,0 +1,75 @@
+# ── Node.js ───────────────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# ── Environment variables (NEVER commit secrets) ──────────────────────────────
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.production
+# Keep .env.example files (they have no real secrets)
+!.env.example
+
+# ── Next.js ───────────────────────────────────────────────────────────────────
+frontend/.next/
+frontend/out/
+frontend/build/
+backend/frontend/.next/
+backend/frontend/out/
+
+# ── Rust / Cargo ──────────────────────────────────────────────────────────────
+anchor-program/target/
+contracts/target/
+**/*.rs.bk
+Cargo.lock
+
+# ── Anchor ────────────────────────────────────────────────────────────────────
+anchor-program/.anchor/
+anchor-program/target/
+
+# ── Solana keypairs (NEVER commit wallet keys) ────────────────────────────────
+**/*.json
+# Allow package.json, tsconfig.json, etc.
+!**/package.json
+!**/package-lock.json
+!**/tsconfig.json
+!**/eslint.config.mjs
+!**/postcss.config.mjs
+!**/next.config.ts
+
+# ── OS files ──────────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V500
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ── Editor ────────────────────────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ── Build output ──────────────────────────────────────────────────────────────
+dist/
+build/
+out/
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
+*.pem
+*.key
+coverage/
+.nyc_output/
+.cache/
