@@ -34,14 +34,13 @@ anchor-program/.anchor/
 anchor-program/target/
 
 # ── Solana keypairs (NEVER commit wallet keys) ────────────────────────────────
-**/*.json
-# Allow package.json, tsconfig.json, etc.
-!**/package.json
-!**/package-lock.json
-!**/tsconfig.json
-!**/eslint.config.mjs
-!**/postcss.config.mjs
-!**/next.config.ts
+# Block only Solana wallet keypair files by their common naming patterns
+id.json
+*-keypair.json
+*-wallet.json
+wallet.json
+keypair.json
+~/.config/solana/id.json
 
 # ── OS files ──────────────────────────────────────────────────────────────────
 .DS_Store
