@@ -72,7 +72,7 @@ export default function Home() {
           >
             <span className="text-lg">🎓</span>
             <div className="text-left">
-              <p className="text-xs font-black tracking-wide text-white leading-none">UMT</p>
+              <p className="text-xs font-black font-bold tracking-wide text-white leading-none">UMT</p>
               <p className="text-[10px] leading-none mt-0.5" style={{ color:'var(--text-3)' }}>
                 University of Management and Technology
               </p>
@@ -86,7 +86,7 @@ export default function Home() {
           style={{ background:'rgba(153,69,255,0.12)', border:'1px solid rgba(153,69,255,0.3)', color:'#C084FC' }}
         >
           <span className="h-1.5 w-1.5 rounded-full bg-[#14F195] inline-block" />
-          Solana Hackathon 2025
+          Solana Hackathon 2026
         </span>
 
         {/* Headline */}
