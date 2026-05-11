@@ -15,9 +15,19 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
+      <head>
+        {/* Apply saved theme before React hydrates — prevents flash of wrong theme */}
+        <script dangerouslySetInnerHTML={{ __html: `
+          try {
+            if (localStorage.getItem('theme') === 'light') {
+              document.documentElement.classList.add('light');
+            }
+          } catch {}
+        ` }} />
+      </head>
       <body className="min-h-screen flex flex-col">
         <Navbar />
-        <div className="flex flex-col flex-1 pt-14">{children}</div>
+        <div className="flex flex-col flex-1 pt-16">{children}</div>
       </body>
     </html>
   );
