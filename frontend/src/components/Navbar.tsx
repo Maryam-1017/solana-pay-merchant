@@ -10,7 +10,7 @@ const NAV_LINKS = [
   { href: '/history',           label: 'History'    },
   { href: '/analytics',         label: 'Analytics', badge: 'NEW' },
   { href: '/rewards',           label: 'Rewards',   badge: 'NEW' },
-  { href: '/onboarding',        label: 'Profile'    },
+  { href: '/profile',           label: 'Profile'    },
 ];
 
 export function Navbar() {

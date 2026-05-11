@@ -1,6 +1,6 @@
 const express = require('express');
 const router  = express.Router();
-const { registerMerchant, getMerchantByWallet } = require('../db');
+const { registerMerchant, getMerchantByWallet, getFirstMerchant } = require('../db');
 
 // Solana addresses are base58-encoded 32-byte keys: 32–44 chars, no 0/O/I/l
 function isValidSolanaAddress(addr) {
@@ -47,6 +47,19 @@ router.get('/merchants/profile', async (req, res) => {
     return res.json(merchant);
   } catch (err) {
     console.error('merchant profile error', err);
+    return res.status(500).json({ error: 'internal' });
+  }
+});
+
+// GET /api/merchants/latest — returns the most recently registered merchant.
+// Used by the profile page when no wallet address is available yet.
+router.get('/merchants/latest', async (_req, res) => {
+  try {
+    const merchant = await getFirstMerchant();
+    if (!merchant) return res.status(404).json({ error: 'no merchant registered yet' });
+    return res.json(merchant);
+  } catch (err) {
+    console.error('merchant latest error', err);
     return res.status(500).json({ error: 'internal' });
   }
 });

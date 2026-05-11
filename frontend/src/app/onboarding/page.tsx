@@ -44,6 +44,8 @@ export default function OnboardingPage() {
       });
       const data = await res.json();
       if (!res.ok) { setErrMsg(data.error || 'Registration failed'); setStatus('error'); return; }
+      // Persist wallet so the profile page can load without Phantom being connected
+      try { localStorage.setItem('solpay_merchant_wallet', wallet); } catch { /* ignore */ }
       setDone(data); setStatus('success');
     } catch {
       setErrMsg('Cannot reach backend — is it running on port 4000?'); setStatus('error');
