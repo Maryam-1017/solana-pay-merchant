@@ -48,27 +48,26 @@ export default function ProfilePage() {
   const [email, setEmail] = useState('');
 
   useEffect(() => {
-    loadMerchant();
-  }, []);
-
-  async function loadMerchant() {
-    setLoading(true);
-    setError('');
-
-    // ── Step 1: show cached data instantly (works even without DB/network) ──
+    // Read localStorage synchronously before any network call so the
+    // profile renders immediately — no API needed, no loading spinner.
     try {
-      const cached = localStorage.getItem('solpay_merchant_data');
-      if (cached) {
-        const m: Merchant = JSON.parse(cached);
-        console.log('[profile] cache hit:', m.name, m.wallet_address?.slice(0, 8));
+      const raw = localStorage.getItem('solpay_merchant_data');
+      if (raw) {
+        const m: Merchant = JSON.parse(raw);
+        console.log('[profile] instant cache:', m.name, m.wallet_address?.slice(0, 8));
         setMerchant(m);
         setName(m.name);
         setCat(m.category || 'general');
         setEmail(m.email || '');
         setLoading(false);
-        // Continue to refresh from backend in background (don't await)
       }
-    } catch { /* bad JSON — ignore, will re-fetch */ }
+    } catch { /* ignore bad JSON */ }
+
+    loadMerchant(); // background refresh
+  }, []);
+
+  async function loadMerchant() {
+    setError('');
 
     // ── Step 2: refresh from backend (updates cache if DB is live) ──────────
     try {

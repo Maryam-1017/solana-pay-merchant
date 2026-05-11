@@ -89,6 +89,7 @@ export default function PaymentPage() {
     }
   };
 
+  // Poll backend DB every 3 s (webhook path)
   useEffect(() => {
     if (!reference || status === 'paid') return;
     const iv = setInterval(async () => {
@@ -99,6 +100,34 @@ export default function PaymentPage() {
         if (d.status === 'completed') setStatus('paid');
       } catch { /* ignore */ }
     }, 3000);
+    return () => clearInterval(iv);
+  }, [reference, status]);
+
+  // Poll Helius RPC directly every 2 s — bypasses webhook entirely.
+  // getSignaturesForAddress finds any confirmed tx that includes the
+  // reference key as a read-only account (how Solana Pay works).
+  useEffect(() => {
+    if (!reference || status === 'paid') return;
+    const HELIUS = 'https://devnet.helius-rpc.com/?api-key=b5227e64-c909-4260-9e03-ecb80c2caccd';
+    const iv = setInterval(async () => {
+      try {
+        const res = await fetch(HELIUS, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0', id: 1,
+            method:  'getSignaturesForAddress',
+            params:  [reference, { limit: 1, commitment: 'confirmed' }],
+          }),
+        });
+        const data = await res.json();
+        const sigs = data.result || [];
+        if (sigs.length > 0 && !sigs[0].err) {
+          console.log('[payment] confirmed on-chain:', sigs[0].signature);
+          setStatus('paid');
+        }
+      } catch { /* ignore */ }
+    }, 2000);
     return () => clearInterval(iv);
   }, [reference, status]);
 
