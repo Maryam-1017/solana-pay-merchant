@@ -4,8 +4,8 @@ const crypto  = require('crypto');
 const db      = require('../db');
 
 const USDC_DEVNET_MINT = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
+const LINK_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-// ── Helpers (no external deps) ───────────────────────────────────────────────
 const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 function toBase58(buf) {
   const d = [0];
@@ -17,6 +17,7 @@ function toBase58(buf) {
   return d.reverse().map(x => B58[x]).join('');
 }
 function generateReference() { return toBase58(crypto.randomBytes(32)); }
+
 function buildSolanaPayUrl({ recipient, amount, splToken, reference, label, message }) {
   const p = new URLSearchParams();
   if (amount    != null) p.set('amount',    String(amount));
@@ -25,6 +26,13 @@ function buildSolanaPayUrl({ recipient, amount, splToken, reference, label, mess
   if (label)             p.set('label',     label);
   if (message)           p.set('message',   message);
   return `solana:${recipient}?${p.toString()}`;
+}
+
+// Loyalty points: 1 point per 1 USDC, 10 points per 1 SOL (approx)
+function calcLoyalty(amount, currency) {
+  if (currency === 'USDC') return Math.floor(parseFloat(amount));
+  if (currency === 'SOL')  return Math.floor(parseFloat(amount) * 10);
+  return 0;
 }
 
 // ── POST /api/payments ───────────────────────────────────────────────────────
@@ -39,11 +47,11 @@ async function handleCreatePayment(req, res) {
     if (!['SOL', 'USDC'].includes(currency))
       return res.status(400).json({ error: 'currency must be SOL or USDC' });
 
-    const label     = req.body.label   || process.env.MERCHANT_NAME || 'Merchant';
-    const message   = req.body.message || `${currency} payment to ${label}`;
-    const reference = generateReference();
-
-    await db.createPayment({ reference, recipient, amount, label, currency });
+    const label          = req.body.label   || process.env.MERCHANT_NAME || 'Merchant';
+    const message        = req.body.message || `${currency} payment to ${label}`;
+    const reference      = generateReference();
+    const loyaltyPoints  = calcLoyalty(amount, currency);
+    const expiresAt      = new Date(Date.now() + LINK_TTL_MS);
 
     const url = buildSolanaPayUrl({
       recipient,
@@ -54,7 +62,23 @@ async function handleCreatePayment(req, res) {
       message,
     });
 
-    return res.json({ reference, url, recipient, amount, currency });
+    await db.createPayment({ reference, recipient, amount, label, currency, solanaUrl: url, loyaltyPoints, expiresAt });
+
+    const frontendBase = process.env.FRONTEND_URL
+      ? process.env.FRONTEND_URL.split(',')[0].trim()
+      : 'https://solana-pay-merchant.vercel.app';
+
+    return res.json({
+      reference,
+      url,
+      recipient,
+      amount,
+      currency,
+      label,
+      loyaltyPoints,
+      expiresAt:   expiresAt.toISOString(),
+      paymentLink: `${frontendBase}/pay/${reference}`,
+    });
   } catch (err) {
     console.error('payment error:', err.message);
     return res.status(500).json({ error: 'internal' });
@@ -68,12 +92,10 @@ router.delete('/payments/:reference', async (req, res) => {
   try {
     if (!db.dbAvailable())
       return res.status(503).json({ error: 'database not connected' });
-
     const { reference } = req.params;
     const payment = await db.getPaymentByReference(reference);
-    if (!payment)                        return res.status(404).json({ error: 'not found' });
-    if (payment.status === 'completed')  return res.status(400).json({ error: 'cannot delete completed payment' });
-
+    if (!payment)                       return res.status(404).json({ error: 'not found' });
+    if (payment.status === 'completed') return res.status(400).json({ error: 'cannot delete completed payment' });
     await db.pool.query('DELETE FROM payments WHERE reference=$1', [reference]);
     return res.json({ success: true });
   } catch (err) {
@@ -87,31 +109,41 @@ router.get('/payments/status', async (req, res) => {
   try {
     const { reference } = req.query;
     if (!reference) return res.status(400).json({ error: 'reference required' });
-
     const payment = await db.getPaymentByReference(reference);
-    if (!payment) return res.status(404).json({ error: 'not found' });
+    if (!payment)   return res.status(404).json({ error: 'not found' });
 
-    return res.json({
-      status:    payment.status,
-      currency:  payment.currency,
-      signature: payment.signature || null,
-      amount:    payment.amount,
-      recipient: payment.recipient,
-      createdAt: payment.created_at,
-    });
+    // Check expiry
+    if (payment.expires_at && new Date(payment.expires_at) < new Date() && payment.status === 'pending') {
+      return res.json({ status: 'expired', ...baseFields(payment) });
+    }
+
+    return res.json({ status: payment.status, ...baseFields(payment) });
   } catch (err) {
     console.error('status error:', err.message);
     return res.status(500).json({ error: 'internal' });
   }
 });
 
+function baseFields(p) {
+  return {
+    currency:      p.currency,
+    signature:     p.signature || null,
+    amount:        p.amount,
+    label:         p.label,
+    recipient:     p.recipient,
+    solanaUrl:     p.solana_url,
+    loyaltyPoints: p.loyalty_points,
+    expiresAt:     p.expires_at,
+    createdAt:     p.created_at,
+  };
+}
+
 // ── GET /api/payments ────────────────────────────────────────────────────────
 router.get('/payments', async (_req, res) => {
   try {
-    if (!db.dbAvailable()) return res.json([]);   // empty list, not an error
-
+    if (!db.dbAvailable()) return res.json([]);
     const result = await db.pool.query(
-      'SELECT * FROM payments ORDER BY created_at DESC LIMIT 100'
+      'SELECT * FROM payments ORDER BY created_at DESC LIMIT 200'
     );
     return res.json(result.rows);
   } catch (err) {

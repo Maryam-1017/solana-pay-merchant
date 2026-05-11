@@ -1,6 +1,5 @@
 const { Pool } = require('pg');
 
-// ── Connection ───────────────────────────────────────────────────────────────
 let pool = null;
 let dbAvailable = false;
 
@@ -15,7 +14,6 @@ if (process.env.DATABASE_URL) {
   console.warn('[db] DATABASE_URL not set — running without database (demo mode)');
 }
 
-// ── Init ─────────────────────────────────────────────────────────────────────
 async function init() {
   if (!dbAvailable) return;
   try {
@@ -26,25 +24,32 @@ async function init() {
         wallet_address TEXT UNIQUE NOT NULL,
         category       TEXT DEFAULT 'general',
         email          TEXT,
+        reward_rate    NUMERIC DEFAULT 1,
         created_at     TIMESTAMP DEFAULT NOW()
       );
     `);
     await pool.query(`
       CREATE TABLE IF NOT EXISTS payments (
-        id         SERIAL PRIMARY KEY,
-        reference  TEXT UNIQUE,
-        recipient  TEXT,
-        amount     NUMERIC,
-        label      TEXT,
-        currency   TEXT DEFAULT 'SOL',
-        status     TEXT DEFAULT 'pending',
-        signature  TEXT,
-        created_at TIMESTAMP DEFAULT NOW()
+        id               SERIAL PRIMARY KEY,
+        reference        TEXT UNIQUE,
+        recipient        TEXT,
+        amount           NUMERIC,
+        label            TEXT,
+        currency         TEXT DEFAULT 'SOL',
+        solana_url       TEXT,
+        loyalty_points   NUMERIC DEFAULT 0,
+        expires_at       TIMESTAMP,
+        status           TEXT DEFAULT 'pending',
+        signature        TEXT,
+        created_at       TIMESTAMP DEFAULT NOW()
       );
     `);
-    await pool.query(`
-      ALTER TABLE payments ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT 'SOL';
-    `);
+    // Idempotent migrations for existing tables
+    await pool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS currency       TEXT DEFAULT 'SOL';`);
+    await pool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS solana_url     TEXT;`);
+    await pool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS loyalty_points NUMERIC DEFAULT 0;`);
+    await pool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS expires_at     TIMESTAMP;`);
+    await pool.query(`ALTER TABLE merchants ADD COLUMN IF NOT EXISTS reward_rate   NUMERIC DEFAULT 1;`);
     console.log('[db] Tables ready');
   } catch (e) {
     console.warn('[db] Init failed:', e.message);
@@ -52,9 +57,8 @@ async function init() {
   }
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
 async function registerMerchant({ name, walletAddress, category, email }) {
-  if (!dbAvailable) return { name, wallet_address: walletAddress, category: category || 'general', email };
+  if (!dbAvailable) return { name, wallet_address: walletAddress, category: category || 'general', email, reward_rate: 1 };
   const res = await pool.query(
     `INSERT INTO merchants(name, wallet_address, category, email)
      VALUES($1,$2,$3,$4)
@@ -72,16 +76,17 @@ async function getMerchantByWallet(walletAddress) {
   return res.rows[0];
 }
 
-async function createPayment({ reference, recipient, amount, label, currency = 'SOL' }) {
-  if (!dbAvailable) return { reference, recipient, amount, label, currency, status: 'pending' };
+async function createPayment({ reference, recipient, amount, label, currency = 'SOL', solanaUrl = null, loyaltyPoints = 0, expiresAt = null }) {
+  if (!dbAvailable) return { reference, recipient, amount, label, currency, solana_url: solanaUrl, loyalty_points: loyaltyPoints, status: 'pending' };
   const res = await pool.query(
-    `INSERT INTO payments(reference, recipient, amount, label, currency)
-     VALUES($1,$2,$3,$4,$5)
+    `INSERT INTO payments(reference, recipient, amount, label, currency, solana_url, loyalty_points, expires_at)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8)
      ON CONFLICT (reference) DO UPDATE
        SET recipient=EXCLUDED.recipient, amount=EXCLUDED.amount,
-           label=EXCLUDED.label, currency=EXCLUDED.currency
+           label=EXCLUDED.label, currency=EXCLUDED.currency,
+           solana_url=EXCLUDED.solana_url, loyalty_points=EXCLUDED.loyalty_points
      RETURNING *`,
-    [reference, recipient, amount, label || null, currency.toUpperCase()]
+    [reference, recipient, amount, label || null, currency.toUpperCase(), solanaUrl, loyaltyPoints, expiresAt]
   );
   return res.rows[0];
 }

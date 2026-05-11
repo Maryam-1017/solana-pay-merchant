@@ -1,5 +1,40 @@
 import Link from 'next/link';
 
+const UNIQUE_FEATURES = [
+  {
+    icon: '📶',
+    title: 'Offline QR Payments',
+    body: 'Generate a QR code once — it works even with no internet. Payment data is embedded in the QR itself. Perfect for Pakistan, Africa, and markets with unreliable connectivity.',
+    badge: 'vs Helio, Sphere, Pay.sh',
+    href: '/dashboard/payment',
+    color: '#14F195',
+  },
+  {
+    icon: '🎁',
+    title: 'On-Chain Loyalty Points',
+    body: 'Every purchase automatically earns real loyalty points. 1 USDC = 1 point. Merchant-configurable reward rate. On-chain SPL token minting on roadmap.',
+    badge: 'vs all competitors',
+    href: '/rewards',
+    color: '#C084FC',
+  },
+  {
+    icon: '🔗',
+    title: 'Payment Links',
+    body: 'Generate shareable payment links that work on WhatsApp, SMS, and social media. Customer clicks → connects Phantom → pays in one tap. Expires in 24 hours.',
+    badge: 'vs Helio, Sphere',
+    href: '/dashboard/payment',
+    color: '#60A5FA',
+  },
+  {
+    icon: '📊',
+    title: 'Merchant Analytics',
+    body: 'Real business analytics built in: revenue by day/week/month, peak hours chart, currency breakdown, success rates. No other Solana Pay app shows merchants this data.',
+    badge: 'vs all competitors',
+    href: '/analytics',
+    color: '#FCD34D',
+  },
+];
+
 const STATS = [
   { value: '0%',   label: 'Processing fee' },
   { value: '<1s',  label: 'Settlement time' },
@@ -138,6 +173,39 @@ export default function Home() {
               <h3 className="font-bold text-base">{title}</h3>
               <p className="text-sm leading-relaxed" style={{ color:'var(--text-2)' }}>{body}</p>
             </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Unique Features ──────────────────────────────────────────── */}
+      <section className="px-6 py-20 max-w-5xl mx-auto w-full">
+        <div className="text-center mb-12">
+          <span className="inline-block mb-3 px-3 py-1 rounded-full text-xs font-bold"
+            style={{ background:'rgba(20,241,149,0.12)', color:'#14F195', border:'1px solid rgba(20,241,149,0.25)' }}>
+            ✦ Not in Helio · Sphere · Pay.sh
+          </span>
+          <h2 className="text-3xl font-bold">4 Features <span className="g-text">No Competitor Has</span></h2>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          {UNIQUE_FEATURES.map(({ icon, title, body, badge, href, color }) => (
+            <Link key={title} href={href}
+              className="group flex flex-col gap-3 rounded-2xl p-6 transition-all duration-300 hover:scale-[1.02]"
+              style={{ background:'rgba(255,255,255,0.03)', border:`1px solid ${color}30` }}>
+              <div className="flex items-start justify-between">
+                <span className="text-3xl">{icon}</span>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded-full text-[9px] font-black"
+                    style={{ background: color + '22', color, border:`1px solid ${color}44` }}>
+                    NEW
+                  </span>
+                </div>
+              </div>
+              <h3 className="font-bold text-base" style={{ color }}>{title}</h3>
+              <p className="text-sm leading-relaxed" style={{ color:'var(--text-2)' }}>{body}</p>
+              <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color:'var(--text-3)' }}>
+                Unique vs {badge} →
+              </p>
+            </Link>
           ))}
         </div>
       </section>
