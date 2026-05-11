@@ -122,10 +122,14 @@ router.delete('/payments/:reference', async (req, res) => {
 });
 
 // ── GET /api/payments/status ─────────────────────────────────────────────────
+// If DB says "pending", we also query the Solana RPC directly to detect
+// payments that the Helius webhook may have missed. This is the critical
+// fallback that makes the frontend polling reliable.
 router.get('/payments/status', async (req, res) => {
   try {
     const { reference } = req.query;
     if (!reference) return res.status(400).json({ error: 'reference required' });
+
     const payment = await db.getPaymentByReference(reference);
     if (!payment)   return res.status(404).json({ error: 'not found' });
 
@@ -134,12 +138,55 @@ router.get('/payments/status', async (req, res) => {
       return res.json({ status: 'expired', ...baseFields(payment) });
     }
 
+    // ── On-chain fallback ─────────────────────────────────────────────────
+    // If DB still shows pending, hit the Solana RPC to see if a transaction
+    // referencing this key already landed. Catches webhook misses.
+    if (payment.status === 'pending') {
+      const onChainSig = await checkOnChain(reference);
+      if (onChainSig) {
+        console.log(`[status] on-chain fallback confirmed ${reference} → ${onChainSig}`);
+        await db.markPaymentCompleted(reference, onChainSig);
+        return res.json({ status: 'completed', ...baseFields(payment), signature: onChainSig });
+      }
+    }
+
     return res.json({ status: payment.status, ...baseFields(payment) });
   } catch (err) {
     console.error('status error:', err.message);
     return res.status(500).json({ error: 'internal' });
   }
 });
+
+// Query the Solana RPC for any confirmed transaction that references `address`.
+// The Solana Pay reference key is included as a read-only account in the tx,
+// so getSignaturesForAddress will find it.
+async function checkOnChain(address) {
+  try {
+    const rpc = process.env.HELIUS_API_KEY
+      ? `https://devnet.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY}`
+      : 'https://api.devnet.solana.com';
+
+    const resp = await fetch(rpc, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        jsonrpc: '2.0', id: 1,
+        method:  'getSignaturesForAddress',
+        params:  [address, { limit: 5, commitment: 'confirmed' }],
+      }),
+    });
+
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const sigs  = data.result || [];
+
+    // Return the first confirmed (non-errored) transaction signature
+    const confirmed = sigs.find(s => !s.err);
+    return confirmed?.signature || null;
+  } catch {
+    return null;
+  }
+}
 
 function baseFields(p) {
   return {

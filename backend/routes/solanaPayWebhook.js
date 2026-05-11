@@ -1,85 +1,86 @@
 const express = require('express');
-const router = express.Router();
+const router  = express.Router();
 const { markPaymentCompleted, getPaymentByReference } = require('../db');
 
 const USDC_DEVNET_MINT = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
 
 // POST /api/webhook/solana-pay
-// Helius Enhanced Transactions webhook — handles both SOL and USDC transfers.
-//
-// Helius sends an array of enhanced transaction objects. For each we:
-//   1. Extract all account keys (one of them will be the Solana Pay reference)
-//   2. Check tokenTransfers for USDC payments
-//   3. Check nativeTransfers for SOL payments
-//   4. Try each account key as a potential reference until we find a DB match
 router.post('/webhook/solana-pay', async (req, res) => {
   try {
-    // Helius sends an array; tolerate a bare object too
     const events = Array.isArray(req.body) ? req.body : [req.body];
+    console.log(`[webhook] received ${events.length} event(s)`);
 
     for (const event of events) {
       const signature = event.signature || '';
+      console.log(`[webhook] processing tx: ${signature}`);
 
-      // All accounts involved in the transaction — the Solana Pay reference
-      // is one of them (it's a read-only account key the wallet includes)
-      const accountKeys = (event.accountData || [])
-        .map((a) => a.account)
-        .filter(Boolean);
+      // ── Collect ALL account keys in the transaction ────────────────────────
+      // accountData only has accounts with balance changes (misses read-only keys).
+      // instructions[*].accounts has EVERY account, including the Solana Pay
+      // reference key which is read-only and has zero balance change.
+      const accountKeys = new Set();
 
-      // ── USDC / SPL token transfers ──────────────────────────────────────
-      for (const t of event.tokenTransfers || []) {
+      for (const a of (event.accountData || [])) {
+        if (a.account) accountKeys.add(a.account);
+      }
+
+      // Walk every instruction + inner instruction for their account lists
+      for (const ix of (event.instructions || [])) {
+        for (const acc of (ix.accounts || [])) {
+          if (typeof acc === 'string')   accountKeys.add(acc);
+          else if (acc?.pubkey)          accountKeys.add(acc.pubkey);
+        }
+        for (const inner of (ix.innerInstructions || [])) {
+          for (const acc of (inner.accounts || [])) {
+            if (typeof acc === 'string') accountKeys.add(acc);
+            else if (acc?.pubkey)        accountKeys.add(acc.pubkey);
+          }
+        }
+      }
+
+      console.log(`[webhook] ${accountKeys.size} unique accounts in tx`);
+
+      // ── USDC / SPL token transfers ─────────────────────────────────────────
+      for (const t of (event.tokenTransfers || [])) {
         if (t.mint !== USDC_DEVNET_MINT) continue;
-
-        const recipient   = t.toUserAccount;
-        const amountUsdc  = parseFloat(t.tokenAmount);
-
-        await matchAndComplete(accountKeys, recipient, amountUsdc, 'USDC', signature);
+        console.log(`[webhook] USDC transfer: ${t.tokenAmount} → ${t.toUserAccount}`);
+        await matchAndComplete([...accountKeys], t.toUserAccount, parseFloat(t.tokenAmount), 'USDC', signature);
       }
 
-      // ── SOL native transfers ────────────────────────────────────────────
-      for (const t of event.nativeTransfers || []) {
-        const recipient = t.toUserAccount;
-        const amountSol = t.amount / 1e9; // lamports → SOL
-
-        await matchAndComplete(accountKeys, recipient, amountSol, 'SOL', signature);
-      }
-
-      // ── Legacy format (original assumption — kept for backward compat) ──
-      for (const t of event.transfers || []) {
-        const reference = t.reference;
-        const recipient = t.account;
-        const amount    = parseFloat(t.amount);
-        const txSig     = t.signature || signature;
-
-        if (!reference) continue;
-        const payment = await getPaymentByReference(reference);
-        if (!payment || payment.recipient !== recipient) continue;
-        if (Math.abs(Number(payment.amount) - amount) > 0.000001) continue;
-        await markPaymentCompleted(reference, txSig);
+      // ── SOL native transfers ───────────────────────────────────────────────
+      for (const t of (event.nativeTransfers || [])) {
+        const amountSol = t.amount / 1e9;
+        console.log(`[webhook] SOL transfer: ${amountSol} → ${t.toUserAccount}`);
+        await matchAndComplete([...accountKeys], t.toUserAccount, amountSol, 'SOL', signature);
       }
     }
 
     return res.json({ success: true });
   } catch (err) {
-    console.error('Webhook error', err);
+    console.error('[webhook] error:', err.message);
     return res.status(500).json({ success: false, error: 'internal' });
   }
 });
 
-// Walk every account key in the transaction looking for one that matches a
-// pending payment record with the right recipient, amount, and currency.
+// Walk every account key in the tx looking for a pending payment reference.
+// Checks: reference in DB → recipient matches → amount within 1% → mark done.
 async function matchAndComplete(accountKeys, recipient, amount, currency, signature) {
   for (const ref of accountKeys) {
     const payment = await getPaymentByReference(ref);
-    if (!payment)                                          continue;
-    if (payment.status === 'completed')                    continue;
-    if (payment.currency !== currency)                     continue;
-    if (payment.recipient !== recipient)                   continue;
-    if (Math.abs(Number(payment.amount) - amount) > 0.000001) continue;
+    if (!payment)                        continue;
+    if (payment.status === 'completed')  continue;
+    if (payment.currency !== currency)   continue;
+    if (payment.recipient !== recipient) continue;
 
+    // Allow 1% tolerance to handle rounding and minor price variations
+    const stored = Number(payment.amount);
+    if (stored > 0 && Math.abs(stored - amount) / stored > 0.01) continue;
+
+    console.log(`[webhook] ✓ matched payment ${ref} — marking completed`);
     await markPaymentCompleted(ref, signature);
-    return; // found — stop searching this transaction
+    return true;
   }
+  return false;
 }
 
 module.exports = router;
