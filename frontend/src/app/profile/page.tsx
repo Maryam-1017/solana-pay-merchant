@@ -55,32 +55,46 @@ export default function ProfilePage() {
     setLoading(true);
     setError('');
     try {
-      // 1. Try wallet from localStorage
-      // 2. Try wallet from Phantom
-      // 3. Fall back to /merchants/latest (most recently registered)
-      const wallet = getSavedWallet() || getPhantomWallet();
+      console.log('[profile] loadMerchant start, backend:', BACKEND_URL);
 
-      let res: Response;
-      if (wallet) {
-        res = await fetch(`${BACKEND_URL}/api/merchants/profile?wallet=${encodeURIComponent(wallet)}`);
-      } else {
-        res = await fetch(`${BACKEND_URL}/api/merchants/latest`);
+      // Strategy: try /latest FIRST (no auth, no localStorage needed).
+      // If that 404s, try wallet-specific lookup as a second attempt.
+      // This ensures the page works even if localStorage was cleared.
+      let res = await fetch(`${BACKEND_URL}/api/merchants/latest`);
+      console.log('[profile] /api/merchants/latest →', res.status);
+
+      if (res.status === 404) {
+        // /latest returned 404 = no merchants at all OR endpoint missing
+        // Try wallet-specific as fallback
+        const wallet = getSavedWallet() || getPhantomWallet();
+        console.log('[profile] wallet fallback:', wallet ? wallet.slice(0, 8) + '…' : 'none');
+
+        if (wallet) {
+          res = await fetch(`${BACKEND_URL}/api/merchants/profile?wallet=${encodeURIComponent(wallet)}`);
+          console.log('[profile] /api/merchants/profile →', res.status);
+        }
       }
 
       if (res.status === 404) {
+        console.log('[profile] no merchant found in DB');
         setError('no_merchant');
         return;
       }
-      if (!res.ok) throw new Error('fetch failed');
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new Error(`API ${res.status}: ${body}`);
+      }
 
       const data: Merchant = await res.json();
+      console.log('[profile] loaded merchant:', data.name, data.wallet_address?.slice(0, 8));
       setMerchant(data);
-      // Keep localStorage in sync
+      // Keep localStorage in sync with whatever we loaded
       try { localStorage.setItem('solpay_merchant_wallet', data.wallet_address); } catch { /**/ }
       setName(data.name);
       setCat(data.category || 'general');
       setEmail(data.email || '');
-    } catch {
+    } catch (err) {
+      console.error('[profile] error:', err);
       setError('backend_down');
     } finally {
       setLoading(false);

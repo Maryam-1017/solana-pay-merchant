@@ -56,10 +56,11 @@ router.get('/merchants/profile', async (req, res) => {
 router.get('/merchants/latest', async (_req, res) => {
   try {
     const merchant = await getFirstMerchant();
+    console.log('[merchants/latest] found:', merchant ? merchant.name : 'none');
     if (!merchant) return res.status(404).json({ error: 'no merchant registered yet' });
     return res.json(merchant);
   } catch (err) {
-    console.error('merchant latest error', err);
+    console.error('[merchants/latest] error:', err);
     return res.status(500).json({ error: 'internal' });
   }
 });
