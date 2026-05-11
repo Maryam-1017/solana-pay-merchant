@@ -42,12 +42,29 @@ async function handleCreatePayment(req, res) {
     if (!amount || isNaN(amount) || amount <= 0)
       return res.status(400).json({ error: 'invalid amount' });
 
-    const recipient = req.body.recipient || process.env.MERCHANT_WALLET || 'DEMO_WALLET';
+    // Resolve recipient: DB merchant → env var → demo fallback
+    // Priority: explicit body.recipient > body.merchantWallet lookup >
+    //           most-recently-registered merchant > MERCHANT_WALLET env > demo
+    let recipient    = req.body.recipient || null;
+    let merchantName = null;
+
+    if (!recipient && req.body.merchantWallet) {
+      const m = await db.getMerchantByWallet(req.body.merchantWallet);
+      recipient    = m?.wallet_address || null;
+      merchantName = m?.name           || null;
+    }
+
+    if (!recipient) {
+      const m = await db.getFirstMerchant();
+      recipient    = m?.wallet_address || process.env.MERCHANT_WALLET || 'DEMO_WALLET';
+      merchantName = m?.name           || null;
+    }
+
     const currency  = (req.body.currency || 'SOL').toUpperCase();
     if (!['SOL', 'USDC'].includes(currency))
       return res.status(400).json({ error: 'currency must be SOL or USDC' });
 
-    const label          = req.body.label   || process.env.MERCHANT_NAME || 'Merchant';
+    const label          = req.body.label   || merchantName || process.env.MERCHANT_NAME || 'Merchant';
     const message        = req.body.message || `${currency} payment to ${label}`;
     const reference      = generateReference();
     const loyaltyPoints  = calcLoyalty(amount, currency);

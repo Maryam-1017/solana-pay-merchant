@@ -76,6 +76,14 @@ async function getMerchantByWallet(walletAddress) {
   return res.rows[0];
 }
 
+// Returns the most recently registered merchant — used as the default
+// payment recipient when no specific wallet is supplied in the request.
+async function getFirstMerchant() {
+  if (!dbAvailable) return null;
+  const res = await pool.query('SELECT * FROM merchants ORDER BY created_at DESC LIMIT 1');
+  return res.rows[0] || null;
+}
+
 async function createPayment({ reference, recipient, amount, label, currency = 'SOL', solanaUrl = null, loyaltyPoints = 0, expiresAt = null }) {
   if (!dbAvailable) return { reference, recipient, amount, label, currency, solana_url: solanaUrl, loyalty_points: loyaltyPoints, status: 'pending' };
   const res = await pool.query(
@@ -112,6 +120,7 @@ module.exports = {
   dbAvailable: () => dbAvailable,
   registerMerchant,
   getMerchantByWallet,
+  getFirstMerchant,
   createPayment,
   markPaymentCompleted,
   getPaymentByReference,
