@@ -54,48 +54,62 @@ export default function ProfilePage() {
   async function loadMerchant() {
     setLoading(true);
     setError('');
-    try {
-      console.log('[profile] loadMerchant start, backend:', BACKEND_URL);
 
-      // Strategy: try /latest FIRST (no auth, no localStorage needed).
-      // If that 404s, try wallet-specific lookup as a second attempt.
-      // This ensures the page works even if localStorage was cleared.
+    // ── Step 1: show cached data instantly (works even without DB/network) ──
+    try {
+      const cached = localStorage.getItem('solpay_merchant_data');
+      if (cached) {
+        const m: Merchant = JSON.parse(cached);
+        console.log('[profile] cache hit:', m.name, m.wallet_address?.slice(0, 8));
+        setMerchant(m);
+        setName(m.name);
+        setCat(m.category || 'general');
+        setEmail(m.email || '');
+        setLoading(false);
+        // Continue to refresh from backend in background (don't await)
+      }
+    } catch { /* bad JSON — ignore, will re-fetch */ }
+
+    // ── Step 2: refresh from backend (updates cache if DB is live) ──────────
+    try {
+      console.log('[profile] fetching from backend:', BACKEND_URL);
+
+      // Try /latest first (no wallet param needed)
       let res = await fetch(`${BACKEND_URL}/api/merchants/latest`);
       console.log('[profile] /api/merchants/latest →', res.status);
 
+      // Fallback: wallet-specific lookup
       if (res.status === 404) {
-        // /latest returned 404 = no merchants at all OR endpoint missing
-        // Try wallet-specific as fallback
         const wallet = getSavedWallet() || getPhantomWallet();
         console.log('[profile] wallet fallback:', wallet ? wallet.slice(0, 8) + '…' : 'none');
-
         if (wallet) {
           res = await fetch(`${BACKEND_URL}/api/merchants/profile?wallet=${encodeURIComponent(wallet)}`);
           console.log('[profile] /api/merchants/profile →', res.status);
         }
       }
 
-      if (res.status === 404) {
-        console.log('[profile] no merchant found in DB');
-        setError('no_merchant');
-        return;
+      if (res.ok) {
+        const data: Merchant = await res.json();
+        console.log('[profile] backend loaded:', data.name, data.wallet_address?.slice(0, 8));
+        // Update state and cache with fresh data
+        setMerchant(data);
+        setName(data.name);
+        setCat(data.category || 'general');
+        setEmail(data.email || '');
+        try {
+          localStorage.setItem('solpay_merchant_wallet', data.wallet_address);
+          localStorage.setItem('solpay_merchant_data',   JSON.stringify(data));
+        } catch { /**/ }
+      } else if (res.status === 404) {
+        // Backend has no merchant — only show error if cache was also empty
+        // Only show "no merchant" if cache was also empty
+        setMerchant(m => { if (!m) setError('no_merchant'); return m; });
+        console.log('[profile] 404 from backend — showing cache or no_merchant');
       }
-      if (!res.ok) {
-        const body = await res.text().catch(() => '');
-        throw new Error(`API ${res.status}: ${body}`);
-      }
-
-      const data: Merchant = await res.json();
-      console.log('[profile] loaded merchant:', data.name, data.wallet_address?.slice(0, 8));
-      setMerchant(data);
-      // Keep localStorage in sync with whatever we loaded
-      try { localStorage.setItem('solpay_merchant_wallet', data.wallet_address); } catch { /**/ }
-      setName(data.name);
-      setCat(data.category || 'general');
-      setEmail(data.email || '');
     } catch (err) {
-      console.error('[profile] error:', err);
-      setError('backend_down');
+      console.error('[profile] backend error:', err);
+      // Only show backend_down if we have no cached data to show
+      setMerchant(m => { if (!m) setError('backend_down'); return m; });
     } finally {
       setLoading(false);
     }

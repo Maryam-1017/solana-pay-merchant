@@ -44,8 +44,13 @@ export default function OnboardingPage() {
       });
       const data = await res.json();
       if (!res.ok) { setErrMsg(data.error || 'Registration failed'); setStatus('error'); return; }
-      // Persist wallet so the profile page can load without Phantom being connected
-      try { localStorage.setItem('solpay_merchant_wallet', wallet); } catch { /* ignore */ }
+      // Persist full merchant object — profile page reads this directly,
+      // so it works even if DB is unavailable (demo/no-DB mode).
+      try {
+        localStorage.setItem('solpay_merchant_wallet', wallet);
+        localStorage.setItem('solpay_merchant_data',   JSON.stringify(data));
+        console.log('[onboarding] saved to localStorage:', data.name, wallet.slice(0, 8));
+      } catch { /* ignore */ }
       setDone(data); setStatus('success');
     } catch {
       setErrMsg('Cannot reach backend — is it running on port 4000?'); setStatus('error');
