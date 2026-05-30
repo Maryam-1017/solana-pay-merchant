@@ -48,9 +48,18 @@ export default function PaymentPage() {
   const [jazzResult,    setJazzResult]   = useState<BridgeResult | null>(null);
   const [jazzError,     setJazzError]    = useState('');
 
-  const usdcPreview = pkrAmount && parseFloat(pkrAmount) > 0
-    ? (parseFloat(pkrAmount) / DEMO_RATE).toFixed(2)
-    : '0.00';
+  // Debounced PKR — only update 400 ms after user stops typing so the
+  // conversion line disappears while typing and shows ONE stable value.
+  const [stablePkr, setStablePkr] = useState('');
+  useEffect(() => {
+    if (!pkrAmount || parseFloat(pkrAmount) <= 0) { setStablePkr(''); return; }
+    const t = setTimeout(() => setStablePkr(pkrAmount), 400);
+    return () => clearTimeout(t);
+  }, [pkrAmount]);
+
+  const usdcPreview = stablePkr && parseFloat(stablePkr) > 0
+    ? (parseFloat(stablePkr) / DEMO_RATE).toFixed(2)
+    : '';
 
   useEffect(() => {
     setOnline(navigator.onLine);
@@ -347,9 +356,10 @@ export default function PaymentPage() {
                       onChange={e => setPkrAmount(e.target.value)}
                       placeholder="2780" min="1" step="1" />
                   </div>
-                  {pkrAmount && parseFloat(pkrAmount) > 0 && (
+                  {/* Conversion line — only appears 400 ms after user stops typing */}
+                  {usdcPreview && (
                     <div className="mt-2 flex items-center gap-2 text-sm">
-                      <span style={{ color:'var(--text-3)' }}>Rs. {parseFloat(pkrAmount).toLocaleString()}</span>
+                      <span style={{ color:'var(--text-3)' }}>Rs. {parseFloat(stablePkr).toLocaleString()}</span>
                       <span style={{ color:'var(--text-3)' }}>→</span>
                       <span className="font-black text-[#14F195]">{usdcPreview} USDC</span>
                       <span className="text-xs px-2 py-0.5 rounded-full" style={{ background:'rgba(20,241,149,0.1)', color:'#14F195', border:'1px solid rgba(20,241,149,0.2)' }}>
@@ -409,30 +419,49 @@ export default function PaymentPage() {
                     <span className="font-mono font-semibold">{jazzPhone || '+92 3XX-XXXXXXX'}</span>
                   </div>
 
-                  {/* MPIN dots */}
+                  {/* MPIN dots + keypad */}
                   <div>
                     <label className="block mb-2 text-xs font-semibold uppercase tracking-widest text-center" style={{ color:'var(--text-3)' }}>Enter MPIN</label>
-                    <div className="flex justify-center gap-3">
+
+                    {/* Dots */}
+                    <div className="flex justify-center gap-3 mb-4">
                       {[0,1,2,3,4,5].map(i => (
-                        <div key={i} className="h-10 w-10 rounded-full border-2 flex items-center justify-center"
-                          style={{ borderColor: i < jazzMpin.length ? '#D40046' : 'var(--border)', background: i < jazzMpin.length ? 'rgba(212,0,70,0.12)' : 'transparent' }}>
+                        <div key={i} className="h-10 w-10 rounded-full border-2 flex items-center justify-center transition-all"
+                          style={{ borderColor: i < jazzMpin.length ? '#D40046' : 'var(--border)', background: i < jazzMpin.length ? 'rgba(212,0,70,0.15)' : 'transparent' }}>
                           {i < jazzMpin.length && <div className="h-3 w-3 rounded-full" style={{ background:'#D40046' }} />}
                         </div>
                       ))}
                     </div>
-                    {/* Hidden real input */}
-                    <input
-                      type="password"
-                      maxLength={6}
-                      className="sr-only"
-                      value={jazzMpin}
-                      onChange={e => setJazzMpin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                      autoFocus
-                      id="mpin-input"
-                    />
-                    <label htmlFor="mpin-input" className="block text-center mt-2 text-xs cursor-pointer" style={{ color:'rgba(212,0,70,0.7)' }}>
-                      Tap to enter MPIN (demo: any 6 digits)
-                    </label>
+
+                    {/* Clickable keypad — works on mobile and desktop */}
+                    {(() => {
+                      const press = (d: string) => {
+                        if (jazzMpin.length < 6) setJazzMpin(p => p + d);
+                      };
+                      const back = () => setJazzMpin(p => p.slice(0, -1));
+                      const keys = ['1','2','3','4','5','6','7','8','9','','0','⌫'];
+                      return (
+                        <div className="grid grid-cols-3 gap-2">
+                          {keys.map((k, i) => (
+                            k === '' ? <div key={i} /> :
+                            k === '⌫' ? (
+                              <button key={i} type="button" onClick={back}
+                                className="rounded-xl py-3 text-base font-bold transition-all active:scale-95"
+                                style={{ background:'rgba(255,255,255,0.06)', border:'1px solid var(--border)', color:'var(--text-2)' }}>
+                                ⌫
+                              </button>
+                            ) : (
+                              <button key={i} type="button" onClick={() => press(k)}
+                                disabled={jazzMpin.length >= 6}
+                                className="rounded-xl py-3 text-base font-bold transition-all active:scale-95 disabled:opacity-30"
+                                style={{ background:'rgba(212,0,70,0.08)', border:'1px solid rgba(212,0,70,0.25)', color:'#fff' }}>
+                                {k}
+                              </button>
+                            )
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {jazzError && <p className="text-xs text-center" style={{ color:'#F87171' }}>{jazzError}</p>}
