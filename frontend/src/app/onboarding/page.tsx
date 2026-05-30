@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
@@ -17,13 +18,23 @@ const CATEGORIES = [
 type Status = 'idle'|'loading'|'success'|'error';
 
 export default function OnboardingPage() {
-  const [name,    setName]    = useState('');
-  const [wallet,  setWallet]  = useState('');
-  const [cat,     setCat]     = useState('general');
-  const [email,   setEmail]   = useState('');
-  const [status,  setStatus]  = useState<Status>('idle');
-  const [errMsg,  setErrMsg]  = useState('');
-  const [done,    setDone]    = useState<{ name:string; wallet_address:string; category:string }|null>(null);
+  const router = useRouter();
+
+  const [name,      setName]      = useState('');
+  const [wallet,    setWallet]    = useState('');
+  const [cat,       setCat]       = useState('general');
+  const [email,     setEmail]     = useState('');
+  const [status,    setStatus]    = useState<Status>('idle');
+  const [errMsg,    setErrMsg]    = useState('');
+  const [done,      setDone]      = useState<{ name:string; wallet_address:string; category:string }|null>(null);
+  const [alreadyIn, setAlreadyIn] = useState(false);
+
+  // Block access if already registered
+  useEffect(() => {
+    try {
+      if (localStorage.getItem('solpay_merchant_wallet')) setAlreadyIn(true);
+    } catch { /**/ }
+  }, []);
 
   const detectWallet = () => {
     const p = typeof window !== 'undefined' ? (window as any).phantom?.solana ?? (window as any).solana : null;
@@ -52,10 +63,42 @@ export default function OnboardingPage() {
         console.log('[onboarding] saved to localStorage:', data.name, wallet.slice(0, 8));
       } catch { /* ignore */ }
       setDone(data); setStatus('success');
+      // Auto-redirect to dashboard — merchant is now logged in
+      setTimeout(() => router.push('/dashboard'), 1800);
     } catch {
       setErrMsg('Cannot reach backend — is it running on port 4000?'); setStatus('error');
     }
   };
+
+  /* ── Already logged in ── */
+  if (alreadyIn && status === 'idle') {
+    return (
+      <main className="min-h-screen flex items-center justify-center px-6">
+        <div className="glass rounded-2xl p-10 max-w-sm w-full text-center flex flex-col gap-5">
+          <span className="text-4xl">✅</span>
+          <h2 className="text-xl font-bold">You're already registered</h2>
+          <p className="text-sm" style={{ color:'var(--text-2)' }}>
+            Your merchant account is active. Go to the dashboard to accept payments.
+          </p>
+          <Link href="/dashboard" className="btn-sol py-3 text-sm rounded-xl">
+            Go to Dashboard →
+          </Link>
+          <button
+            onClick={() => {
+              try {
+                Object.keys(localStorage)
+                  .filter(k => k.startsWith('solpay_'))
+                  .forEach(k => localStorage.removeItem(k));
+              } catch { /**/ }
+              setAlreadyIn(false);
+            }}
+            className="text-xs hover:underline" style={{ color:'var(--text-3)' }}>
+            Register a different account instead
+          </button>
+        </div>
+      </main>
+    );
+  }
 
   /* ── Success ── */
   if (status === 'success' && done) {

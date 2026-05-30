@@ -145,11 +145,11 @@ export default function Home() {
 
         {/* CTAs */}
         <div className="mt-10 flex flex-wrap gap-3 justify-center">
-          <Link href="/onboarding" className="btn-sol px-7 py-3 text-sm rounded-xl">
-            Start Accepting Payments →
+          <Link href="/login" className="btn-sol px-7 py-3 text-sm rounded-xl">
+            Login to Dashboard →
           </Link>
-          <Link href="/dashboard" className="btn-ghost px-7 py-3 text-sm rounded-xl">
-            Open Dashboard
+          <Link href="/onboarding" className="btn-ghost px-7 py-3 text-sm rounded-xl">
+            Register as Merchant
           </Link>
         </div>
 
