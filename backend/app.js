@@ -8,6 +8,7 @@ var cors = require('cors');
 var paymentIntentRouter = require('./routes/paymentIntent');
 var solanaWebhook = require('./routes/solanaPayWebhook');
 var merchantsRouter = require('./routes/merchants');
+var bridgeRouter = require('./routes/bridge');
 
 var app = express();
 
@@ -42,6 +43,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api', paymentIntentRouter);
 app.use('/api', solanaWebhook);
 app.use('/api', merchantsRouter);
+app.use('/api', bridgeRouter);
 
 // init DB
 const db = require('./db');

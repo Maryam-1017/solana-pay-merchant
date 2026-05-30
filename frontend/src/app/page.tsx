@@ -33,6 +33,14 @@ const UNIQUE_FEATURES = [
     href: '/analytics',
     color: '#FCD34D',
   },
+  {
+    icon: '📱',
+    title: 'JazzCash / Easypaisa Bridge',
+    body: 'Pakistan-first: customers pay in PKR via JazzCash or Easypaisa — the app converts to USDC and settles on Solana in seconds. No crypto wallet needed for customers.',
+    badge: 'unique in Pakistan',
+    href: '/dashboard/payment',
+    color: '#FF6B35',
+  },
 ];
 
 const STATS = [
@@ -184,7 +192,7 @@ export default function Home() {
             style={{ background:'rgba(20,241,149,0.12)', color:'#14F195', border:'1px solid rgba(20,241,149,0.25)' }}>
             ✦ Not in Helio · Sphere · Pay.sh
           </span>
-          <h2 className="text-3xl font-bold">4 Features <span className="g-text">No Competitor Has</span></h2>
+          <h2 className="text-3xl font-bold">5 Features <span className="g-text">No Competitor Has</span></h2>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           {UNIQUE_FEATURES.map(({ icon, title, body, badge, href, color }) => (
