@@ -27,16 +27,27 @@ function timeAgo(ts: string) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
+function getSavedWallet(): string | null {
+  try { return localStorage.getItem('solpay_merchant_wallet'); } catch { return null; }
+}
+
 export default function HistoryPage() {
-  const [payments,  setPayments]  = useState<Payment[]>([]);
-  const [loading,   setLoading]   = useState(true);
-  const [error,     setError]     = useState('');
-  const [filter,    setFilter]    = useState<'all'|'completed'|'pending'>('all');
-  const [deleting,  setDeleting]  = useState<string | null>(null); // reference being deleted
-  const [confirmId, setConfirmId] = useState<string | null>(null); // reference awaiting confirm
+  const [payments,      setPayments]  = useState<Payment[]>([]);
+  const [loading,       setLoading]   = useState(true);
+  const [error,         setError]     = useState('');
+  const [filter,        setFilter]    = useState<'all'|'completed'|'pending'>('all');
+  const [deleting,      setDeleting]  = useState<string | null>(null);
+  const [confirmId,     setConfirmId] = useState<string | null>(null);
+  const [walletMissing, setWalletMissing] = useState(false);
 
   useEffect(() => {
-    fetch(`${BACKEND_URL}/api/payments`)
+    const wallet = getSavedWallet();
+    if (!wallet) {
+      setWalletMissing(true);
+      setLoading(false);
+      return;
+    }
+    fetch(`${BACKEND_URL}/api/payments?wallet=${encodeURIComponent(wallet)}`)
       .then(r => { if (!r.ok) throw new Error(); return r.json(); })
       .then(setPayments)
       .catch(() => setError('Could not load transactions — is the backend running?'))
@@ -121,8 +132,22 @@ export default function HistoryPage() {
           )}
         </div>
 
+        {/* Not registered */}
+        {walletMissing && (
+          <div className="glass rounded-2xl p-10 text-center flex flex-col gap-4">
+            <p className="text-3xl">🏪</p>
+            <p className="font-bold">Register first to see your payments</p>
+            <p className="text-sm" style={{ color:'var(--text-3)' }}>
+              Your payment history is tied to your wallet address.
+            </p>
+            <Link href="/onboarding" className="btn-sol px-6 py-2.5 text-sm rounded-xl inline-block mx-auto">
+              Register Now →
+            </Link>
+          </div>
+        )}
+
         {/* Loading */}
-        {loading && (
+        {!walletMissing && loading && (
           <div className="glass rounded-2xl p-10 flex items-center justify-center gap-3" style={{ color:'var(--text-3)' }}>
             <span className="h-4 w-4 rounded-full border-2 border-purple-400 border-t-transparent animate-spin" />
             Loading transactions…
@@ -130,7 +155,7 @@ export default function HistoryPage() {
         )}
 
         {/* Error */}
-        {error && (
+        {!walletMissing && error && (
           <div className="rounded-2xl px-5 py-4 text-sm" style={{ background:'rgba(248,113,113,0.08)', border:'1px solid rgba(248,113,113,0.2)', color:'#F87171' }}>
             {error}
           </div>

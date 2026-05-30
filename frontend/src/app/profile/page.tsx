@@ -73,18 +73,17 @@ export default function ProfilePage() {
     try {
       console.log('[profile] fetching from backend:', BACKEND_URL);
 
-      // Try /latest first (no wallet param needed)
-      let res = await fetch(`${BACKEND_URL}/api/merchants/latest`);
-      console.log('[profile] /api/merchants/latest →', res.status);
-
-      // Fallback: wallet-specific lookup
-      if (res.status === 404) {
-        const wallet = getSavedWallet() || getPhantomWallet();
-        console.log('[profile] wallet fallback:', wallet ? wallet.slice(0, 8) + '…' : 'none');
-        if (wallet) {
-          res = await fetch(`${BACKEND_URL}/api/merchants/profile?wallet=${encodeURIComponent(wallet)}`);
-          console.log('[profile] /api/merchants/profile →', res.status);
-        }
+      // If we have a wallet, ONLY look up that specific merchant.
+      // Never fall back to /latest (which could return a different merchant).
+      const wallet = getSavedWallet() || getPhantomWallet();
+      let res: Response;
+      if (wallet) {
+        res = await fetch(`${BACKEND_URL}/api/merchants/profile?wallet=${encodeURIComponent(wallet)}`);
+        console.log('[profile] /api/merchants/profile →', res.status);
+      } else {
+        // No wallet at all — only then use /latest
+        res = await fetch(`${BACKEND_URL}/api/merchants/latest`);
+        console.log('[profile] /api/merchants/latest →', res.status);
       }
 
       if (res.ok) {

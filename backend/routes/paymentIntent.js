@@ -50,7 +50,8 @@ async function handleCreatePayment(req, res) {
 
     if (!recipient && req.body.merchantWallet) {
       const m = await db.getMerchantByWallet(req.body.merchantWallet);
-      recipient    = m?.wallet_address || null;
+      // Use DB wallet if registered, else use the submitted address directly
+      recipient    = m?.wallet_address || req.body.merchantWallet;
       merchantName = m?.name           || null;
     }
 
@@ -202,12 +203,17 @@ function baseFields(p) {
   };
 }
 
-// ── GET /api/payments ────────────────────────────────────────────────────────
-router.get('/payments', async (_req, res) => {
+// ── GET /api/payments?wallet=ADDRESS ─────────────────────────────────────────
+// Returns only payments where recipient = wallet.
+// If no wallet param, returns [] to enforce per-merchant isolation.
+router.get('/payments', async (req, res) => {
   try {
     if (!db.dbAvailable()) return res.json([]);
+    const { wallet } = req.query;
+    if (!wallet) return res.json([]);
     const result = await db.pool.query(
-      'SELECT * FROM payments ORDER BY created_at DESC LIMIT 200'
+      'SELECT * FROM payments WHERE recipient=$1 ORDER BY created_at DESC LIMIT 200',
+      [wallet]
     );
     return res.json(result.rows);
   } catch (err) {

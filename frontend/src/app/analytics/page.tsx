@@ -37,12 +37,19 @@ function Bar({ pct, color }: { pct: number; color: string }) {
   );
 }
 
+function getSavedWallet(): string | null {
+  try { return localStorage.getItem('solpay_merchant_wallet'); } catch { return null; }
+}
+
 export default function AnalyticsPage() {
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [loading,  setLoading]  = useState(true);
+  const [payments,      setPayments]      = useState<Payment[]>([]);
+  const [loading,       setLoading]       = useState(true);
+  const [walletMissing, setWalletMissing] = useState(false);
 
   useEffect(() => {
-    fetch(`${BACKEND_URL}/api/payments`)
+    const wallet = getSavedWallet();
+    if (!wallet) { setWalletMissing(true); setLoading(false); return; }
+    fetch(`${BACKEND_URL}/api/payments?wallet=${encodeURIComponent(wallet)}`)
       .then(r => r.json())
       .then(d => setPayments(Array.isArray(d) ? d : []))
       .catch(() => setPayments([]))
@@ -90,7 +97,14 @@ export default function AnalyticsPage() {
           <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">NEW</span>
         </div>
 
-        {loading ? (
+        {walletMissing ? (
+          <div className="glass rounded-2xl p-10 text-center flex flex-col gap-4">
+            <p className="text-3xl">🏪</p>
+            <p className="font-bold">Register first to see your analytics</p>
+            <p className="text-sm" style={{ color:'var(--text-3)' }}>Analytics are scoped to your wallet address.</p>
+            <a href="/onboarding" className="btn-sol px-6 py-2.5 text-sm rounded-xl inline-block mx-auto">Register Now →</a>
+          </div>
+        ) : loading ? (
           <div className="glass rounded-2xl p-10 flex justify-center" style={{ color:'var(--text-3)' }}>
             <span className="animate-spin h-5 w-5 rounded-full border-2 border-purple-400 border-t-transparent" />
           </div>

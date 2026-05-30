@@ -34,11 +34,17 @@ const ACTION_CARDS = [
   },
 ];
 
+function getSavedWallet(): string | null {
+  try { return localStorage.getItem('solpay_merchant_wallet'); } catch { return null; }
+}
+
 export default function DashboardPage() {
   const [summary, setSummary] = useState<Summary | null>(null);
 
   useEffect(() => {
-    fetch(`${BACKEND_URL}/api/payments`)
+    const wallet = getSavedWallet();
+    if (!wallet) return; // no wallet → show —/— metrics, no API call
+    fetch(`${BACKEND_URL}/api/payments?wallet=${encodeURIComponent(wallet)}`)
       .then(r => r.json())
       .then((rows: any[]) => {
         const completed = rows.filter(r => r.status === 'completed');

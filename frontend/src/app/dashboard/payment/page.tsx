@@ -81,7 +81,15 @@ export default function PaymentPage() {
       const res = await fetch(`${BACKEND_URL}/api/payments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: parsed, label: label || undefined, currency }),
+        body: JSON.stringify({
+          amount: parsed,
+          label: label || undefined,
+          currency,
+          // Send the registered wallet so QR recipient is always this merchant
+          merchantWallet: ((): string | undefined => {
+            try { return localStorage.getItem('solpay_merchant_wallet') ?? undefined; } catch { return undefined; }
+          })(),
+        }),
       });
       if (!res.ok) {
         const e = await res.json().catch(() => ({}));
